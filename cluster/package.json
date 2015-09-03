@@ -1,0 +1,20 @@
+{
+  "name": "mongo-cluster",
+  "version": "0.1.0",
+  "description": "manage mongo infrastructure like a breath",
+  "author": "Jan Guth <jan.guth@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/fentas/docker/mongo-cluster"
+  },
+  "dependencies": {
+    "bunyan": "^1.4.0",
+    "extend": "^3.0.0",
+    "fibers": "^1.0.6",
+    "ini": "^1.3.4",
+    "minimist": "^1.1.3",
+    "node-libcurl": "^0.5.1"
+  },
+  "license": "AGPLv3",
+  "private": true
+}
