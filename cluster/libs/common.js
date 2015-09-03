@@ -3,7 +3,6 @@ var udp = require('../utils/udp'),
     Instance = require('./instance'),
     Fiber = require('fibers'),
     local = require('./local'),
-    exec = require('../utils/exec'),
     util = require('util'),
     dns = require('dns'),
     bunyan = require('../utils/bunyan')()
@@ -82,13 +81,13 @@ common.prototype.lookupMongoCluster = function(itype) {
 
       return
     }
-    else if ( /^#/.test(list) ) {
+    /*else if ( /^#/.test(list) ) {
       bunyan.debug({list: list}, 'Recognized MONGO_CLUSTER_INSTANCES as bash script.')
 
       list = exec(list.substr(1))
       if ( list.code !== 0 ) bunyan.error({shell: list}, 'bash script returned error code.')
       instances = list.output
-    }
+    }*/
     else instances = list
 
     if ( instances && /^(.+,?)+$/.test(instances) ) { //\d{3}\.\d{3})\.\d{3}\.\d{3}

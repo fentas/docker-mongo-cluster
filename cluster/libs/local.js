@@ -20,6 +20,21 @@ function local() {
       if ( error )
         bunyan.fatal({cname: process.env['MONGO_CLUSTER_CNAME'], error: error}, 'Can not lookup local instance. Nor is there a address.')
     })
+  else if ( /^https?/.test(process.env['MONGO_CLUSTER_ADDRESS']) ) {
+    var http = require('http'),
+        self = this, address = []
+
+    http.get(process.env['MONGO_CLUSTER_ADDRESS'], function(res) {
+      res.on('data', function(chunk){ address.push(chunk) })
+      res.on('end', function(){
+        address = address.join('').toString()
+        bunyan.debug({result: address}, '[MONGO_CLUSTER_ADDRESS] Http request successfull.')
+        self.set('address', address)
+      })
+    }).on('error', function(e) {
+      bunyan.error({error: e}, '[MONGO_CLUSTER_ADDRESS] Http request resolved into an error.')
+    })
+  }
 
   this.set('_.argv', argv)
   switch ( argv._[0] ) {

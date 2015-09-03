@@ -19,16 +19,25 @@ ENV BUNYAN_STDOUT_LEVEL='info'
 RUN curl -o /usr/local/bin/jq -SL 'https://github.com/stedolan/jq/releases/download/jq-1.5/jq-linux64' && \
   chmod +x /usr/local/bin/jq
 
-# nodejs source
-RUN curl -s https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key add -
-RUN echo 'deb https://deb.nodesource.com/node_0.12 wheezy main' > /etc/apt/sources.list.d/nodesource.list
-
-RUN set -x && \
+RUN \
   apt-get update && \
   apt-get install -y \
-    nodejs \
-    libcurl3-dev \
-  && rm -rf /var/lib/apt/lists/*
+    apt-transport-https
+
+# nodejs source
+RUN \
+  curl -s https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key add - && \
+  echo 'deb https://deb.nodesource.com/node_0.12 wheezy main' > /etc/apt/sources.list.d/nodesource.list && \
+  apt-get update && \
+  apt-get install -y \
+    nodejs
+
+RUN \
+  rm -rf /var/lib/apt/lists/* && \
+  find /usr/share/doc -depth -type f ! -name copyright|xargs rm || true && \
+  find /usr/share/doc -empty|xargs rmdir || true && \
+  rm -rf /usr/share/man/* /usr/share/groff/* /usr/share/info/* && \
+  rm -rf /usr/share/lintian/* /usr/share/linda/* /var/cache/man/*
 
 RUN \
   npm install -g forever && \
