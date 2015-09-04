@@ -16,5 +16,8 @@ udp
   .use(itype)
   .bind(27023)
 
-// intuducing myself
-common.lookupMongoCluster(itype)
+// check myself
+local.ready(function() {
+  // intuducing myself
+  common.lookupMongoCluster(itype)
+})

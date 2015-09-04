@@ -1,15 +1,16 @@
 // https://raw.githubusercontent.com/extrabacon/python-shell/master/index.js
 //
-var EventEmitter = require('events').EventEmitter;
-var path = require('path');
-var util = require('util');
-var spawn = require('child_process').spawn;
+var EventEmitter = require('events').EventEmitter,
+    path = require('path'),
+    util = require('util'),
+    spawn = require('child_process').spawn,
+    EJSON = require('mongodb-extended-json')
 
 function toArray(source) {
     if (typeof source === 'undefined' || source === null) {
         return [];
     } else if (!Array.isArray(source)) {
-        return [source];
+        return [(typeof source === 'object' ? JSON.stringify(source) : source)];
     }
     return source;
 }
@@ -57,6 +58,7 @@ var Shell = function (script, options) {
     this.mode = options.mode || 'text';
     this.formatter = resolve('format', options.formatter || this.mode);
     this.parser = resolve('parse', options.parser || this.mode);
+    this.parsePerLine = !!options.parsePerLine;
     this.terminated = false;
     this.childProcess = spawn(shellPath, this.command, options);
 
@@ -115,6 +117,9 @@ Shell.format = {
     },
     json: function toJson(data) {
         return JSON.stringify(data);
+    },
+    ejson: function toEjson(data) {
+        return EJSON.stringify(data);
     }
 };
 
@@ -125,6 +130,9 @@ Shell.parse = {
     },
     json: function asJson(data) {
         return JSON.parse(data);
+    },
+    ejson: function asEjson(data) {
+      return EJSON.parse(data, null, 'shell')
     }
 };
 
@@ -141,13 +149,15 @@ Shell.run = function (script, options, callback) {
         options = null;
     }
 
-    var pyshell = new Shell(script, options);
+    var shell = new Shell(script, options);
     var output = [];
 
-    return pyshell.on('message', function (message) {
+    return shell.on('message', function (message) {
         output.push(message);
     }).end(function (err) {
         if (err) return callback(err);
+        if ( ! shell.parsePerLine && output.length )
+          output = [shell.parser(output.join(' '))]
         return callback(null, output.length ? output : null);
     });
 };
@@ -215,7 +225,10 @@ Shell.prototype.receive = function (data) {
 
     parts.forEach(function (part) {
         try {
-            self.emit('message', self.parser(part));
+            if ( self.parsePerLine )
+              self.emit('message', self.parser(part));
+            else
+              self.emit('message', part);
         } catch(err) {
             self.emit('error', extend(
                 new Error('invalid message: ' + data + ' >> ' + err),

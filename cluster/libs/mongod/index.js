@@ -7,12 +7,74 @@ var middleware = require('../../utils/middleware'),
 
 shell.defaultOptions = {
   scriptPath: __dirname,
-  mode: 'json'
+  mode: 'ejson'
 }
 
 util.inherits(mongod, middleware)
 function mongod() {
 
+}
+
+function getReplSetPeers() {
+  bunyan.debug({peers: common.getInstances('mongod'), type: (typeof common.getInstances('mongod'))}, 'getReplSetPeers')
+  return rs = common.getInstances('mongod').filter(function(instance, i) {
+    //TODO: what if config file is used.
+    bunyan.debug({local: local.get('_.argv').replSet, instance: instance.get('_.argv').replSet}, 'Compare peers')
+    if ( instance.get('_.argv').replSet == local.get('_.argv').replSet )
+      return true
+  })
+}
+
+function replSetStartup(initiate) {
+  var primary = null,
+      setup = true,
+      rs = getReplSetPeers()
+
+  bunyan.debug({rs: rs}, 'Checkout peers.')
+  for ( var i = 0 ; i < rs.length ; i++ ) {
+    if ( setup ) setup = local.get('started') < rs[i].get('started')
+
+    if ( rs[i].get('_.rs.isMaster').ismaster ) {
+      primary = rs[i]
+      break
+    }
+  }
+
+  if ( primary ) {
+    bunyan.debug({primary: primary}, 'Got primary.')
+    primary.emit('rs.add')
+  }
+  else if ( setup ) {
+    bunyan.debug('I am prime! Setup.')
+    if ( rs.length != 2 ) bunyan.warn('There should be 3 instances in %s. Given: %s.', local.get('replSet'), rs.length+1)
+    var configuration = {
+          "_id": local.get('_.argv').replSet,
+          "members": [],
+        }
+    configuration.members.push({"_id": 0, "host": local.getFullAddress()})
+    for ( var i = 1 ; i <= rs.length ; i++ )
+      configuration.members.push({"_id": i, "host": rs[i].getFullAddress()})
+
+    shell.run('_.rs.reconfig.sh', {
+      "args": {
+        "initiate": (typeof initiate === 'boolean' ? initiate : true),
+        "force": true,
+        "configuration": configuration
+      }
+    }, function(err, result) {
+      if ( err ) bunyan.fatal({error: err}, '_.rs.reconfig.sh failed.')
+      else if ( ! result[0] || ! result[0].ok )
+        bunyan.warn({result: result}, '[reconf] something went wrong.')
+      else
+        bunyan.info({result: result}, '[reconf] ReplSet is setup.')
+    })
+
+    // if shard there is a mongos, then register to mongos
+    // TODO: what if mongos is not started yet?
+    bunyan.debug('Check for mongos. Shard replSet?')
+    var mongos = common.getInstances('mongos')[0]
+    if ( mongos ) mongos.emit('sh.addShard')
+  }
 }
 
 module.exports = exports = new function() {
@@ -66,22 +128,24 @@ module.exports = exports = new function() {
   })
 
   // first run
-  common.on('_initialize', function initialize() {
+  use.on('_initialize', function initialize() {
     //TODO: on reboot nothing to do
     if ( local.status == 'configured' ) return;
 
     // replSet is in startup.
     var rs_status = local.get('_.rs.status')
     if ( ! rs_status.ok ) {
-      bunyan.info({status: rs_status}, 'Instance is single mongod instance; no replSet.')
+      //bunyan.info({status: rs_status}, 'Unknown replSet status.')
+      bunyan.info({status: rs_status}, 'check code.')
+      // "errmsg" : "no replset config has been received"
+      // "info" : "run rs.initiate(...) if not yet done for the set"
+      if ( rs_status.code == 94 )
+        replSetStartup(true)
+      // "errmsg" : "Our replica set config is invalid or we are not a member of it"
+      else if ( rs_status.code == 93 )
+        replSetStartup(false)
     }
     else if ( rs_status.startupStatus ) {
-      var rs = common.getInstances('mongod').filter(function(instance, i) {
-        //TODO: what if config file is used.
-        if ( instance.get('_.argv').replSet == local.get('_.argv').replSet )
-          return true
-      })
-
       switch ( rs_status.startupStatus ) {
         // errmsg:  loading local.system.replset config (LOADINGCONFIG)
         // url[]:   http://ufasoli.blogspot.de/2013/05/reconfiguring-mongodb-replicaset-after.html
@@ -95,45 +159,7 @@ module.exports = exports = new function() {
         // errmsg:  can't get local.system.replset config from self or any seed (EMPTYCONFIG)
         // info:    run rs.initiate(...) if not yet done for the set
         case 3:
-          var primary = null,
-              setup = true
-
-          for ( var i = 0 ; i < rs.length ; i++ ) {
-            if ( setup ) setup = local.get('started') < rs[i].get('started')
-
-            if ( rs[i].get('_.rs.isMaster').ismaster ) {
-              primary = rs[i]
-              break
-            }
-          }
-
-          if ( primary ) {
-            primary.emit('rs.add')
-          }
-          else if ( setup ) {
-            if ( rs.length != 2 ) bunyan.warn('There should be 3 instances in %s. Given: %s.', local.get('replSet'), rs.length+1)
-            var members = []
-            members.push(local.getFullAddress())
-            for ( var i = 0 ; i < rs.length ; i++ )
-              members.push(rs[i].getFullAddress())
-
-            shell.run('_.rs.add.sh', {
-              "args": {
-                "initiate": true,
-                "members": members
-              }
-            }, function(err, result) {
-              if ( err ) bunyan.fatal({error: err}, '_.rs.add.sh failed.')
-
-              local.set('_.rs.status', result[0])
-            })
-
-            // if shard there is a mongos, then register to mongos
-            // TODO: what if mongos is not started yet?
-            var mongos = common.getInstances('mongos')[0]
-            if ( mongos ) mongos.emit('sh.addShard')
-          }
-
+          replSetStartup()
           break;
         // errmsg:  all members and seeds must be reachable to initiate set
         // url[]:   http://www.devthought.com/2012/09/18/fixing-mongodb-all-members-and-seeds-must-be-reachable-to-initiate-set/

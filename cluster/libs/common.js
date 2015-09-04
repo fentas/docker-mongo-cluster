@@ -1,7 +1,6 @@
 var udp = require('../utils/udp'),
     middleware = require('../utils/middleware'),
     Instance = require('./instance'),
-    Fiber = require('fibers'),
     local = require('./local'),
     util = require('util'),
     dns = require('dns'),
@@ -9,9 +8,9 @@ var udp = require('../utils/udp'),
 
 util.inherits(common, middleware)
 function common() {
-  this.configsvr = null
-  this.mongod = null
-  this.mongos = null
+  this.configsvr = []
+  this.mongod = []
+  this.mongos = []
   this.count = 0
 }
 
@@ -22,9 +21,11 @@ common.prototype.addInstance = function(host, type) {
 }
 
 common.prototype.getInstances = function(type) {
+  bunyan.debug({instances:this[type], type: type}, 'Get instances.')
   return this[type].filter(function(instance) {
     // remove not reachable instances
-    if ( instance.get(status) )
+    bunyan.debug({instance:instance}, 'Check instance status.')
+    if ( instance.get('status') )
       return true
   })
 }
@@ -52,12 +53,12 @@ common.prototype.lookupMongoCluster = function(itype) {
           bunyan.debug('Instance %s of %s loaded.', pongCount+1, count)
           if ( ++pongCount == count ) {
             bunyan.info('Pong complete.')
-            if ( typeof itype == 'function' )
-              itype()
-            else
-              itype.emit('_initialize')
+            itype.emit ? itype.emit('_initialize') : itype()
           }
         }
+
+    // reset list
+    self[type] = []
 
     if ( /^https?/.test(list) ) {
       bunyan.debug({list: list}, 'Recognized MONGO_CLUSTER_INSTANCES as http url.')
@@ -124,16 +125,30 @@ common.prototype.lookupMongoCluster = function(itype) {
             }
 
             bunyan.debug('A records found')
+            //TODO: exclude local address...
             count += addresses.length - 1
 
             for ( var x = 0 ; x < addresses.length ; x++ ) {
-               var inst = new Instance(addresses[x] + (':'+instance_address.split(':')[1] || '').replace(/:$/, ''), type)
-               inst.ping(pong)
-               self[type].push(inst)
+              bunyan.debug({local: local.get('address'), found: addresses[x]}, 'Comparing addresses.')
+              if ( local.get('address') == addresses[x] ) {
+                --count
+                continue
+              }
+              var inst = new Instance(addresses[x] + (':'+instance_address.split(':')[1] || '').replace(/:$/, ''), type)
+              inst.ping(pong)
+              self[type].push(inst)
             }
 
-            if ( self[type].length == count ) {
+            //bunyan.debug({self: self, type: type, selft: self[type], count: count, itype: (typeof itype)},'whoot.')
+            if ( count == 0 ) {
+              bunyan.debug('Only mongo instance. Going forward.')
+              itype.emit ? itype.emit('_initialize') : itype()
+            }
+            else if ( self[type].length == count ) {
               bunyan.debug('Everything resolved. Waiting for pong.')
+            }
+            else {
+              bunyan.debug({count: count, length: self[type].length}, 'Not finished yet.')
             }
           })
         })(instances[i])

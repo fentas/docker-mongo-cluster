@@ -7,7 +7,7 @@ var middleware = require('../../utils/middleware'),
 
 shell.defaultOptions = {
   scriptPath: __dirname,
-  mode: 'json'
+  mode: 'ejson'
 }
 
 util.inherits(mongos, middleware)
@@ -19,7 +19,7 @@ module.exports = exports = new function() {
   var use = new mongos()
 
     // first run
-    common.on('_initialize', function() {
+    use.on('_initialize', function() {
       //TODO: look out for shards. compare what is registered and what isn't.
     })
 

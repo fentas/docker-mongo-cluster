@@ -69,12 +69,12 @@ instance.prototype.emit = function(event) {
   var msg = {
     "event": event,
     "type": this.get('type'),
-    "args": arguments.slice(1)
+    "args": [].slice.call(arguments, 1)
   }
   msg = new Buffer(JSON.stringify(msg))
-  bunyan.debug({msg: msg, address: this.address, port: process.env['MONGO_CLUSTER_UDP_PORT']}, 'udp send.')
+  bunyan.debug({msg: msg, address: this.get('address'), port: 27023}, 'udp send.')
 
-  udp.send(msg, 0, msg.length, this.address, process.env['MONGO_CLUSTER_UDP_PORT'])
+  udp.send(msg, 0, msg.length, this.get('address'), 27023)
 }
 
 instance.prototype.getFullAddress = function() {
