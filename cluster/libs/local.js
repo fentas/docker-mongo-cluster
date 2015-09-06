@@ -96,11 +96,15 @@ local.prototype.get = function(key, args) {
     bunyan.debug('[local] dyn call. Fiber for the win.', key)
     var fiber = Fiber.current
     shell.run(key+'.sh', {args: args}, function(err, result) {
-      if ( err ) bunyan.error({error: err}, '%s failed!', key)
-      if ( typeof result[0] == 'object' )
-        self.set(key, result[0])
-
       bunyan.debug({result: result}, '%s results!', key)
+      if ( err ) bunyan.error({error: err}, '%s failed!', key)
+      if ( result && typeof result[0] == 'object' )
+        self.set(key, result[0])
+      else {
+        bunyan.fatal('%s failed!', key)
+        process.exit(2)
+      }
+
       fiber.run(result[0])
     })
     return Fiber.yield()

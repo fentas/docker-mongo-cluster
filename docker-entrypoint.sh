@@ -10,7 +10,12 @@ if [ "$1" = 'mongod' ] || [ "$1" = 'mongos' ]; then
 
 	if [ ! -z $MONGO_CLUSTER_ENABLED ]; then
 		function watchCluster() {
-			sleep 10
+			echo "waiting for mongo instance."
+			while ! echo "db.serverStatus()" | mongo --quiet > /dev/null; do
+				sleep 1
+			done
+			echo "db.serverStatus()" | mongo --quiet
+			
 			exec /usr/bin/nodejs /opt/index.js "$@"
 		}
 		watchCluster "$@" &
